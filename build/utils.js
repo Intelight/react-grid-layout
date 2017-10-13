@@ -21,7 +21,9 @@ exports.moveElementAwayFromCollision = moveElementAwayFromCollision;
 exports.perc = perc;
 exports.setTransform = setTransform;
 exports.setTopLeft = setTopLeft;
+exports.sortLayoutItems = sortLayoutItems;
 exports.sortLayoutItemsByRowCol = sortLayoutItemsByRowCol;
+exports.sortLayoutItemsByColRow = sortLayoutItemsByColRow;
 exports.synchronizeLayoutWithChildren = synchronizeLayoutWithChildren;
 exports.validateLayout = validateLayout;
 exports.autoBindHandlers = autoBindHandlers;
@@ -36,6 +38,7 @@ var _react2 = _interopRequireDefault(_react);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+// All callbacks are of the signature (layout, oldItem, newItem, placeholder, e).
 var isProduction = process.env.NODE_ENV === 'production';
 
 /**
@@ -78,6 +81,7 @@ function cloneLayoutItem(layoutItem) {
  * This will catch differences in keys, order, and length.
  */
 function childrenEqual(a, b) {
+  // $FlowIgnore: Appears to think map calls back w/array
   return (0, _lodash2.default)(_react2.default.Children.map(a, function (c) {
     return c.key;
   }), _react2.default.Children.map(b, function (c) {
@@ -106,11 +110,11 @@ function collides(l1, l2) {
  *   vertically.
  * @return {Array}       Compacted Layout.
  */
-function compact(layout, verticalCompact) {
+function compact(layout, compactType, cols) {
   // Statics go in the compareWith array right away so items flow around them.
   var compareWith = getStatics(layout);
   // We go through the items by row and column.
-  var sorted = sortLayoutItemsByRowCol(layout);
+  var sorted = sortLayoutItems(layout, compactType);
   // Holding for new items.
   var out = Array(layout.length);
 
@@ -119,7 +123,7 @@ function compact(layout, verticalCompact) {
 
     // Don't move static elements
     if (!l.static) {
-      l = compactItem(compareWith, l, verticalCompact);
+      l = compactItem(compareWith, l, compactType, cols);
 
       // Add to comparison array. We only collide with items before this one.
       // Statics are already in this array.
@@ -139,23 +143,39 @@ function compact(layout, verticalCompact) {
 /**
  * Compact an item in the layout.
  */
-function compactItem(compareWith, l, verticalCompact) {
-  if (verticalCompact) {
+function compactItem(compareWith, l, compactType, cols) {
+  var compactV = compactType === 'vertical';
+  var compactH = compactType === 'horizontal';
+  if (compactV) {
     // Bottom 'y' possible is the bottom of the layout.
     // This allows you to do nice stuff like specify {y: Infinity}
     // This is here because the layout must be sorted in order to get the correct bottom `y`.
     l.y = Math.min(bottom(compareWith), l.y);
-
     // Move the element up as far as it can go without colliding.
     while (l.y > 0 && !getFirstCollision(compareWith, l)) {
       l.y--;
+    }
+  } else if (compactH) {
+    l.y = Math.min(bottom(compareWith), l.y);
+    // Move the element left as far as it can go without colliding.
+    while (l.x > 0 && !getFirstCollision(compareWith, l)) {
+      l.x--;
     }
   }
 
   // Move it down, and keep moving it down if it's colliding.
   var collides = void 0;
   while (collides = getFirstCollision(compareWith, l)) {
-    l.y = collides.y + collides.h;
+    if (compactH) {
+      l.x = collides.x + collides.w;
+    } else {
+      l.y = collides.y + collides.h;
+    }
+    // Since we can't grow without bounds horizontally, if we've overflown, let's move it down and try again.
+    if (compactH && l.x + l.w > cols) {
+      l.x = cols - l.w;
+      l.y++;
+    }
   }
   return l;
 }
@@ -235,18 +255,21 @@ function getStatics(layout) {
 /**
  * Move an element. Responsible for doing cascading movements of other elements.
  *
- * @param  {Array}      layout Full layout to modify.
- * @param  {LayoutItem} l      element to move.
- * @param  {Number}     [x]    X position in grid units.
- * @param  {Number}     [y]    Y position in grid units.
- * @param  {Boolean}    [isUserAction] If true, designates that the item we're moving is
+ * @param  {Array}      layout            Full layout to modify.
+ * @param  {LayoutItem} l                 element to move.
+ * @param  {Number}     [x]               X position in grid units.
+ * @param  {Number}     [y]               Y position in grid units.
+ * @param  {Boolean}    [isUserAction]    If true, designates that the item we're moving is
  *                                     being dragged/resized by the user.
  */
-function moveElement(layout, l, x, y, isUserAction) {
+function moveElement(layout, l, x, y, isUserAction, preventCollision, compactType, cols) {
   if (l.static) return layout;
 
   // Short-circuit if nothing to do.
   if (l.y === y && l.x === x) return layout;
+
+  var oldX = l.x;
+  var oldY = l.y;
 
   var movingUp = y && l.y > y;
   // This is quite a bit faster than extending the object
@@ -258,9 +281,17 @@ function moveElement(layout, l, x, y, isUserAction) {
   // When doing this comparison, we have to sort the items we compare with
   // to ensure, in the case of multiple collisions, that we're getting the
   // nearest collision.
-  var sorted = sortLayoutItemsByRowCol(layout);
+  var sorted = sortLayoutItems(layout, compactType);
   if (movingUp) sorted = sorted.reverse();
   var collisions = getAllCollisions(sorted, l);
+
+  // There was a collision; abort
+  if (preventCollision && collisions.length) {
+    l.x = oldX;
+    l.y = oldY;
+    l.moved = false;
+    return layout;
+  }
 
   // Move each item that collides away from this element.
   for (var _i7 = 0, len = collisions.length; _i7 < len; _i7++) {
@@ -272,12 +303,13 @@ function moveElement(layout, l, x, y, isUserAction) {
 
     // This makes it feel a bit more precise by waiting to swap for just a bit when moving up.
     if (l.y > collision.y && l.y - collision.y > collision.h / 4) continue;
+    if (l.x > collision.x && l.x - collision.x > collision.w / 4) continue;
 
     // Don't move static items - we have to move *this* element away
     if (collision.static) {
-      layout = moveElementAwayFromCollision(layout, collision, l, isUserAction);
+      layout = moveElementAwayFromCollision(layout, collision, l, isUserAction, compactType, cols);
     } else {
-      layout = moveElementAwayFromCollision(layout, l, collision, isUserAction);
+      layout = moveElementAwayFromCollision(layout, l, collision, isUserAction, compactType, cols);
     }
   }
 
@@ -294,29 +326,32 @@ function moveElement(layout, l, x, y, isUserAction) {
  * @param  {Boolean} [isUserAction]  If true, designates that the item we're moving is being dragged/resized
  *                                   by the user.
  */
-function moveElementAwayFromCollision(layout, collidesWith, itemToMove, isUserAction) {
+function moveElementAwayFromCollision(layout, collidesWith, itemToMove, isUserAction, compactType, cols) {
 
+  var compactH = compactType === 'horizontal';
+  var compactV = compactType === 'vertical';
+  var preventCollision = false; // we're already colliding
   // If there is enough space above the collision to put this element, move it there.
   // We only do this on the main collision as this can get funky in cascades and cause
   // unwanted swapping behavior.
   if (isUserAction) {
     // Make a mock item so we don't modify the item here, only modify in moveElement.
     var fakeItem = {
-      x: itemToMove.x,
-      y: itemToMove.y,
+      x: compactH ? Math.max(collidesWith.x - itemToMove.w, 0) : itemToMove.x,
+      y: !compactH ? Math.max(collidesWith.y - itemToMove.h, 0) : itemToMove.y,
       w: itemToMove.w,
       h: itemToMove.h,
       i: '-1'
     };
-    fakeItem.y = Math.max(collidesWith.y - itemToMove.h, 0);
+
     if (!getFirstCollision(layout, fakeItem)) {
-      return moveElement(layout, itemToMove, undefined, fakeItem.y);
+      return moveElement(layout, itemToMove, compactH ? fakeItem.x : undefined, compactV ? fakeItem.y + 1 : undefined, isUserAction, preventCollision, compactType, cols);
     }
   }
 
   // Previously this was optimized to move below the collision directly, but this can cause problems
-  // with cascading moves, as an item may actually leapfrog a collision and cause a reversal in order.
-  return moveElement(layout, itemToMove, undefined, itemToMove.y + 1);
+  // with cascading moves, as an item may actually leapflog a collision and cause a reversal in order.
+  return moveElement(layout, itemToMove, compactH ? itemToMove.x + 1 : undefined, compactV ? itemToMove.y + 1 : undefined, isUserAction, preventCollision, compactType, cols);
 }
 
 /**
@@ -370,6 +405,10 @@ function setTopLeft(_ref2) {
  * @return {Array} Array of layout objects.
  * @return {Array}        Layout, sorted static items first.
  */
+function sortLayoutItems(layout, compactType) {
+  if (compactType === 'horizontal') return sortLayoutItemsByColRow(layout);else return sortLayoutItemsByRowCol(layout);
+}
+
 function sortLayoutItemsByRowCol(layout) {
   return [].concat(layout).sort(function (a, b) {
     if (a.y > b.y || a.y === b.y && a.x > b.x) {
@@ -382,23 +421,32 @@ function sortLayoutItemsByRowCol(layout) {
   });
 }
 
+function sortLayoutItemsByColRow(layout) {
+  return [].concat(layout).sort(function (a, b) {
+    if (a.x > b.x || a.x === b.x && a.y > b.y) {
+      return 1;
+    }
+    return -1;
+  });
+}
+
 /**
  * Generate a layout using the initialLayout and children as a template.
  * Missing entries will be added, extraneous ones will be truncated.
  *
  * @param  {Array}  initialLayout Layout passed in through props.
  * @param  {String} breakpoint    Current responsive breakpoint.
- * @param  {Boolean} verticalCompact Whether or not to compact the layout vertically.
+ * @param  {?String} compact      Compaction option.
  * @return {Array}                Working layout.
  */
-function synchronizeLayoutWithChildren(initialLayout, children, cols, verticalCompact) {
+function synchronizeLayoutWithChildren(initialLayout, children, cols, compactType) {
   initialLayout = initialLayout || [];
 
   // Generate one layout item per child.
   var layout = [];
   _react2.default.Children.forEach(children, function (child, i) {
     // Don't overwrite if it already exists.
-    var exists = getLayoutItem(initialLayout, child.key || "1" /* FIXME satisfies Flow */);
+    var exists = getLayoutItem(initialLayout, String(child.key));
     if (exists) {
       layout[i] = cloneLayoutItem(exists);
     } else {
@@ -413,18 +461,17 @@ function synchronizeLayoutWithChildren(initialLayout, children, cols, verticalCo
         if (!isProduction) {
           validateLayout([g], 'ReactGridLayout.children');
         }
-
         layout[i] = cloneLayoutItem(_extends({}, g, { i: child.key }));
       } else {
         // Nothing provided: ensure this is added to the bottom
-        layout[i] = cloneLayoutItem({ w: 1, h: 1, x: 0, y: bottom(layout), i: child.key || "1" });
+        layout[i] = cloneLayoutItem({ w: 1, h: 1, x: 0, y: bottom(layout), i: String(child.key) });
       }
     }
   });
 
   // Correct the layout.
   layout = correctBounds(layout, { cols: cols });
-  layout = compact(layout, verticalCompact);
+  layout = compact(layout, compactType, cols);
 
   return layout;
 }

@@ -8,6 +8,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _reactDraggable = require('react-draggable');
 
 var _reactResizable = require('react-resizable');
@@ -286,7 +290,8 @@ var GridItem = function (_React$Component) {
           deltaX = _ref2.deltaX,
           deltaY = _ref2.deltaY;
 
-      if (!_this2.props[handlerName]) return;
+      var handler = _this2.props[handlerName];
+      if (!handler) return;
 
       var newPosition = { top: 0, left: 0 };
 
@@ -297,8 +302,8 @@ var GridItem = function (_React$Component) {
             // ToDo this wont work on nested parents
             var parentRect = node.offsetParent.getBoundingClientRect();
             var clientRect = node.getBoundingClientRect();
-            newPosition.left = clientRect.left - parentRect.left;
-            newPosition.top = clientRect.top - parentRect.top;
+            newPosition.left = clientRect.left - parentRect.left + node.offsetParent.scrollLeft;
+            newPosition.top = clientRect.top - parentRect.top + node.offsetParent.scrollTop;
             _this2.setState({ dragging: newPosition });
             break;
           }
@@ -322,7 +327,7 @@ var GridItem = function (_React$Component) {
           x = _calcXY.x,
           y = _calcXY.y;
 
-      _this2.props[handlerName](_this2.props.i, x, y, { e: e, node: node, newPosition: newPosition });
+      handler.call(_this2, _this2.props.i, x, y, { e: e, node: node, newPosition: newPosition });
     };
   };
 
@@ -343,7 +348,8 @@ var GridItem = function (_React$Component) {
       var node = _ref3.node,
           size = _ref3.size;
 
-      if (!_this3.props[handlerName]) return;
+      var handler = _this3.props[handlerName];
+      if (!handler) return;
       var _props7 = _this3.props,
           cols = _props7.cols,
           x = _props7.x,
@@ -372,7 +378,7 @@ var GridItem = function (_React$Component) {
 
       _this3.setState({ resizing: handlerName === 'onResizeStop' ? null : size });
 
-      _this3.props[handlerName](i, w, h, { e: e, node: node, size: size });
+      handler.call(_this3, i, w, h, { e: e, node: node, size: size });
     };
   };
 
@@ -417,21 +423,21 @@ var GridItem = function (_React$Component) {
 
 GridItem.propTypes = {
   // Children must be only a single element
-  children: _react.PropTypes.element,
+  children: _propTypes2.default.element,
 
   // General grid attributes
-  cols: _react.PropTypes.number.isRequired,
-  containerWidth: _react.PropTypes.number.isRequired,
-  rowHeight: _react.PropTypes.number.isRequired,
-  margin: _react.PropTypes.array.isRequired,
-  maxRows: _react.PropTypes.number.isRequired,
-  containerPadding: _react.PropTypes.array.isRequired,
+  cols: _propTypes2.default.number.isRequired,
+  containerWidth: _propTypes2.default.number.isRequired,
+  rowHeight: _propTypes2.default.number.isRequired,
+  margin: _propTypes2.default.array.isRequired,
+  maxRows: _propTypes2.default.number.isRequired,
+  containerPadding: _propTypes2.default.array.isRequired,
 
   // These are all in grid units
-  x: _react.PropTypes.number.isRequired,
-  y: _react.PropTypes.number.isRequired,
-  w: _react.PropTypes.number.isRequired,
-  h: _react.PropTypes.number.isRequired,
+  x: _propTypes2.default.number.isRequired,
+  y: _propTypes2.default.number.isRequired,
+  w: _propTypes2.default.number.isRequired,
+  h: _propTypes2.default.number.isRequired,
 
   // All optional
   minW: function minW(props, propName) {
@@ -459,34 +465,35 @@ GridItem.propTypes = {
   },
 
   // ID is nice to have for callbacks
-  i: _react.PropTypes.string.isRequired,
+  i: _propTypes2.default.string.isRequired,
 
   // Functions
-  onDragStop: _react.PropTypes.func,
-  onDragStart: _react.PropTypes.func,
-  onDrag: _react.PropTypes.func,
-  onResizeStop: _react.PropTypes.func,
-  onResizeStart: _react.PropTypes.func,
-  onResize: _react.PropTypes.func,
+  onDragStop: _propTypes2.default.func,
+  onDragStart: _propTypes2.default.func,
+  onDrag: _propTypes2.default.func,
+  onResizeStop: _propTypes2.default.func,
+  onResizeStart: _propTypes2.default.func,
+  onResize: _propTypes2.default.func,
 
   // Flags
-  isDraggable: _react.PropTypes.bool.isRequired,
-  isResizable: _react.PropTypes.bool.isRequired,
-  static: _react.PropTypes.bool,
+  isDraggable: _propTypes2.default.bool.isRequired,
+  isResizable: _propTypes2.default.bool.isRequired,
+  static: _propTypes2.default.bool,
 
   // Use CSS transforms instead of top/left
-  useCSSTransforms: _react.PropTypes.bool.isRequired,
+  useCSSTransforms: _propTypes2.default.bool.isRequired,
 
   // Others
-  className: _react.PropTypes.string,
+  className: _propTypes2.default.string,
   // Selector for draggable handle
-  handle: _react.PropTypes.string,
+  handle: _propTypes2.default.string,
   // Selector for draggable cancel (see react-draggable)
-  cancel: _react.PropTypes.string
+  cancel: _propTypes2.default.string
 };
 GridItem.defaultProps = {
   className: '',
   cancel: '',
+  handle: '',
   minH: 1,
   minW: 1,
   maxH: Infinity,

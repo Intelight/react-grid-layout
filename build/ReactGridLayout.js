@@ -8,6 +8,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _lodash = require('lodash.isequal');
 
 var _lodash2 = _interopRequireDefault(_lodash);
@@ -64,8 +68,9 @@ var ReactGridLayout = function (_React$Component) {
 
   ReactGridLayout.prototype.componentWillReceiveProps = function componentWillReceiveProps(nextProps) {
     var newLayoutBase = void 0;
+    // Legacy support for compactType
     // Allow parent to set layout directly.
-    if (!(0, _lodash2.default)(nextProps.layout, this.props.layout)) {
+    if (!(0, _lodash2.default)(nextProps.layout, this.props.layout) || nextProps.compactType !== this.props.compactType) {
       newLayoutBase = nextProps.layout;
     }
 
@@ -78,7 +83,7 @@ var ReactGridLayout = function (_React$Component) {
 
     // We need to regenerate the layout.
     if (newLayoutBase) {
-      var newLayout = (0, _utils.synchronizeLayoutWithChildren)(newLayoutBase, nextProps.children, nextProps.cols, nextProps.verticalCompact);
+      var newLayout = (0, _utils.synchronizeLayoutWithChildren)(newLayoutBase, nextProps.children, nextProps.cols, this.compactType(nextProps));
       var _oldLayout = this.state.layout;
       this.setState({ layout: newLayout });
       this.onLayoutMaybeChanged(newLayout, _oldLayout);
@@ -96,6 +101,11 @@ var ReactGridLayout = function (_React$Component) {
     var nbRow = (0, _utils.bottom)(this.state.layout);
     var containerPaddingY = this.props.containerPadding ? this.props.containerPadding[1] : this.props.margin[1];
     return nbRow * this.props.rowHeight + (nbRow - 1) * this.props.margin[1] + containerPaddingY * 2 + 'px';
+  };
+
+  ReactGridLayout.prototype.compactType = function compactType(props) {
+    if (!props) props = this.props;
+    return props.verticalCompact === false ? null : props.compactType;
   };
 
   /**
@@ -136,6 +146,7 @@ var ReactGridLayout = function (_React$Component) {
         node = _ref2.node;
     var oldDragItem = this.state.oldDragItem;
     var layout = this.state.layout;
+    var cols = this.props.cols;
 
     var l = (0, _utils.getLayoutItem)(layout, i);
     if (!l) return;
@@ -146,12 +157,13 @@ var ReactGridLayout = function (_React$Component) {
     };
 
     // Move the element to the dragged location.
-    layout = (0, _utils.moveElement)(layout, l, x, y, true /* isUserAction */);
+    var isUserAction = true;
+    layout = (0, _utils.moveElement)(layout, l, x, y, isUserAction, this.props.preventCollision, this.compactType(), cols);
 
     this.props.onDrag(layout, oldDragItem, l, placeholder, e, node);
 
     this.setState({
-      layout: (0, _utils.compact)(layout, this.props.verticalCompact),
+      layout: (0, _utils.compact)(layout, this.compactType(), cols),
       activeDrag: placeholder
     });
   };
@@ -171,17 +183,21 @@ var ReactGridLayout = function (_React$Component) {
         node = _ref3.node;
     var oldDragItem = this.state.oldDragItem;
     var layout = this.state.layout;
+    var _props = this.props,
+        cols = _props.cols,
+        preventCollision = _props.preventCollision;
 
     var l = (0, _utils.getLayoutItem)(layout, i);
     if (!l) return;
 
     // Move the element here
-    layout = (0, _utils.moveElement)(layout, l, x, y, true /* isUserAction */);
+    var isUserAction = true;
+    layout = (0, _utils.moveElement)(layout, l, x, y, isUserAction, preventCollision, this.compactType(), cols);
 
     this.props.onDragStop(layout, oldDragItem, l, null, e, node);
 
     // Set state
-    var newLayout = (0, _utils.compact)(layout, this.props.verticalCompact);
+    var newLayout = (0, _utils.compact)(layout, this.compactType(), cols);
     var oldLayout = this.state.oldLayout;
 
     this.setState({
@@ -223,9 +239,17 @@ var ReactGridLayout = function (_React$Component) {
     var _state = this.state,
         layout = _state.layout,
         oldResizeItem = _state.oldResizeItem;
+    var _props2 = this.props,
+        cols = _props2.cols,
+        preventCollision = _props2.preventCollision;
 
     var l = (0, _utils.getLayoutItem)(layout, i);
     if (!l) return;
+
+    // Short circuit if there is a collision in no rearrangement mode.
+    if (preventCollision && (0, _utils.getFirstCollision)(layout, _extends({}, l, { w: w, h: h }))) {
+      return;
+    }
 
     // Set new width and height.
     l.w = w;
@@ -240,7 +264,7 @@ var ReactGridLayout = function (_React$Component) {
 
     // Re-compact the layout and set the drag placeholder.
     this.setState({
-      layout: (0, _utils.compact)(layout, this.props.verticalCompact),
+      layout: (0, _utils.compact)(layout, this.compactType(), cols),
       activeDrag: placeholder
     });
   };
@@ -251,13 +275,14 @@ var ReactGridLayout = function (_React$Component) {
     var _state2 = this.state,
         layout = _state2.layout,
         oldResizeItem = _state2.oldResizeItem;
+    var cols = this.props.cols;
 
     var l = (0, _utils.getLayoutItem)(layout, i);
 
     this.props.onResizeStop(layout, oldResizeItem, l, null, e, node);
 
     // Set state
-    var newLayout = (0, _utils.compact)(layout, this.props.verticalCompact);
+    var newLayout = (0, _utils.compact)(layout, this.compactType(), cols);
     var oldLayout = this.state.oldLayout;
 
     this.setState({
@@ -280,14 +305,14 @@ var ReactGridLayout = function (_React$Component) {
     var activeDrag = this.state.activeDrag;
 
     if (!activeDrag) return null;
-    var _props = this.props,
-        width = _props.width,
-        cols = _props.cols,
-        margin = _props.margin,
-        containerPadding = _props.containerPadding,
-        rowHeight = _props.rowHeight,
-        maxRows = _props.maxRows,
-        useCSSTransforms = _props.useCSSTransforms;
+    var _props3 = this.props,
+        width = _props3.width,
+        cols = _props3.cols,
+        margin = _props3.margin,
+        containerPadding = _props3.containerPadding,
+        rowHeight = _props3.rowHeight,
+        maxRows = _props3.maxRows,
+        useCSSTransforms = _props3.useCSSTransforms;
 
     // {...this.state.activeDrag} is pretty slow, actually
 
@@ -322,20 +347,20 @@ var ReactGridLayout = function (_React$Component) {
 
   ReactGridLayout.prototype.processGridItem = function processGridItem(child) {
     if (!child.key) return;
-    var l = (0, _utils.getLayoutItem)(this.state.layout, child.key);
+    var l = (0, _utils.getLayoutItem)(this.state.layout, String(child.key));
     if (!l) return null;
-    var _props2 = this.props,
-        width = _props2.width,
-        cols = _props2.cols,
-        margin = _props2.margin,
-        containerPadding = _props2.containerPadding,
-        rowHeight = _props2.rowHeight,
-        maxRows = _props2.maxRows,
-        isDraggable = _props2.isDraggable,
-        isResizable = _props2.isResizable,
-        useCSSTransforms = _props2.useCSSTransforms,
-        draggableCancel = _props2.draggableCancel,
-        draggableHandle = _props2.draggableHandle;
+    var _props4 = this.props,
+        width = _props4.width,
+        cols = _props4.cols,
+        margin = _props4.margin,
+        containerPadding = _props4.containerPadding,
+        rowHeight = _props4.rowHeight,
+        maxRows = _props4.maxRows,
+        isDraggable = _props4.isDraggable,
+        isResizable = _props4.isResizable,
+        useCSSTransforms = _props4.useCSSTransforms,
+        draggableCancel = _props4.draggableCancel,
+        draggableHandle = _props4.draggableHandle;
     var mounted = this.state.mounted;
 
     // Parse 'static'. Any properties defined directly on the grid item will take precedence.
@@ -383,9 +408,9 @@ var ReactGridLayout = function (_React$Component) {
   ReactGridLayout.prototype.render = function render() {
     var _this2 = this;
 
-    var _props3 = this.props,
-        className = _props3.className,
-        style = _props3.style;
+    var _props5 = this.props,
+        className = _props5.className,
+        style = _props5.style;
 
 
     var mergedStyle = _extends({
@@ -395,6 +420,8 @@ var ReactGridLayout = function (_React$Component) {
     return _react2.default.createElement(
       'div',
       { className: (0, _classnames2.default)('react-grid-layout', className), style: mergedStyle },
+
+      // $FlowIgnore: Appears to think map calls back w/array
       _react2.default.Children.map(this.props.children, function (child) {
         return _this2.processGridItem(child);
       }),
@@ -410,26 +437,33 @@ ReactGridLayout.propTypes = {
   //
   // Basic props
   //
-  className: _react.PropTypes.string,
-  style: _react.PropTypes.object,
+  className: _propTypes2.default.string,
+  style: _propTypes2.default.object,
 
   // This can be set explicitly. If it is not set, it will automatically
   // be set to the container width. Note that resizes will *not* cause this to adjust.
   // If you need that behavior, use WidthProvider.
-  width: _react.PropTypes.number,
+  width: _propTypes2.default.number,
 
   // If true, the container height swells and contracts to fit contents
-  autoSize: _react.PropTypes.bool,
+  autoSize: _propTypes2.default.bool,
   // # of cols.
-  cols: _react.PropTypes.number,
+  cols: _propTypes2.default.number,
 
   // A selector that will not be draggable.
-  draggableCancel: _react.PropTypes.string,
+  draggableCancel: _propTypes2.default.string,
   // A selector for the draggable handler
-  draggableHandle: _react.PropTypes.string,
+  draggableHandle: _propTypes2.default.string,
 
-  // If true, the layout will compact vertically
-  verticalCompact: _react.PropTypes.bool,
+  // Deprecated
+  verticalCompact: function verticalCompact(props) {
+    if (props.verticalCompact === false && process.env.NODE_ENV !== 'production') {
+      console.warn( // eslint-disable-line no-console
+      '`verticalCompact` on <ReactGridLayout> is deprecated and will be removed soon. ' + 'Use `compactType`: "horizontal" | "vertical" | null.');
+    }
+  },
+  // Choose vertical or hotizontal compaction
+  compactType: _propTypes2.default.oneOf(['vertical', 'horizontal']),
 
   // layout is an array of object with the format:
   // {x: Number, y: Number, w: Number, h: Number, i: String}
@@ -445,46 +479,48 @@ ReactGridLayout.propTypes = {
   //
 
   // Margin between items [x, y] in px
-  margin: _react.PropTypes.arrayOf(_react.PropTypes.number),
+  margin: _propTypes2.default.arrayOf(_propTypes2.default.number),
   // Padding inside the container [x, y] in px
-  containerPadding: _react.PropTypes.arrayOf(_react.PropTypes.number),
+  containerPadding: _propTypes2.default.arrayOf(_propTypes2.default.number),
   // Rows have a static height, but you can change this based on breakpoints if you like
-  rowHeight: _react.PropTypes.number,
+  rowHeight: _propTypes2.default.number,
   // Default Infinity, but you can specify a max here if you like.
   // Note that this isn't fully fleshed out and won't error if you specify a layout that
   // extends beyond the row capacity. It will, however, not allow users to drag/resize
   // an item past the barrier. They can push items beyond the barrier, though.
   // Intentionally not documented for this reason.
-  maxRows: _react.PropTypes.number,
+  maxRows: _propTypes2.default.number,
 
   //
   // Flags
   //
-  isDraggable: _react.PropTypes.bool,
-  isResizable: _react.PropTypes.bool,
+  isDraggable: _propTypes2.default.bool,
+  isResizable: _propTypes2.default.bool,
+  // If true, grid items won't change position when being dragged over.
+  preventCollision: _propTypes2.default.bool,
   // Use CSS transforms instead of top/left
-  useCSSTransforms: _react.PropTypes.bool,
+  useCSSTransforms: _propTypes2.default.bool,
 
   //
   // Callbacks
   //
 
   // Callback so you can save the layout. Calls after each drag & resize stops.
-  onLayoutChange: _react.PropTypes.func,
+  onLayoutChange: _propTypes2.default.func,
 
-  // Calls when drag starts. Callback is of the signature (layout, oldItem, newItem, placeholder, e).
+  // Calls when drag starts. Callback is of the signature (layout, oldItem, newItem, placeholder, e, ?node).
   // All callbacks below have the same signature. 'start' and 'stop' callbacks omit the 'placeholder'.
-  onDragStart: _react.PropTypes.func,
+  onDragStart: _propTypes2.default.func,
   // Calls on each drag movement.
-  onDrag: _react.PropTypes.func,
+  onDrag: _propTypes2.default.func,
   // Calls when drag is complete.
-  onDragStop: _react.PropTypes.func,
+  onDragStop: _propTypes2.default.func,
   //Calls when resize starts.
-  onResizeStart: _react.PropTypes.func,
+  onResizeStart: _propTypes2.default.func,
   // Calls when resize movement happens.
-  onResize: _react.PropTypes.func,
+  onResize: _propTypes2.default.func,
   // Calls when resize is complete.
-  onResizeStop: _react.PropTypes.func,
+  onResizeStop: _propTypes2.default.func,
 
   //
   // Other validations
@@ -498,7 +534,7 @@ ReactGridLayout.propTypes = {
     var keys = {};
     _react2.default.Children.forEach(children, function (child) {
       if (keys[child.key]) {
-        throw new Error("Duplicate child key found! This will cause problems in ReactGridLayout.");
+        throw new Error("Duplicate child key \"" + child.key + "\" found! This will cause problems in ReactGridLayout.");
       }
       keys[child.key] = true;
     });
@@ -516,6 +552,8 @@ ReactGridLayout.defaultProps = {
   isResizable: true,
   useCSSTransforms: true,
   verticalCompact: true,
+  compactType: 'vertical',
+  preventCollision: false,
   onLayoutChange: noop,
   onDragStart: noop,
   onDrag: noop,
@@ -528,7 +566,9 @@ ReactGridLayout.defaultProps = {
 var _initialiseProps = function _initialiseProps() {
   this.state = {
     activeDrag: null,
-    layout: (0, _utils.synchronizeLayoutWithChildren)(this.props.layout, this.props.children, this.props.cols, this.props.verticalCompact),
+    layout: (0, _utils.synchronizeLayoutWithChildren)(this.props.layout, this.props.children, this.props.cols,
+    // Legacy support for verticalCompact: false
+    this.compactType()),
     mounted: false,
     oldDragItem: null,
     oldLayout: null,

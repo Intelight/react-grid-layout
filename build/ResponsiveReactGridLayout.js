@@ -8,6 +8,10 @@ var _react = require('react');
 
 var _react2 = _interopRequireDefault(_react);
 
+var _propTypes = require('prop-types');
+
+var _propTypes2 = _interopRequireDefault(_propTypes);
+
 var _lodash = require('lodash.isequal');
 
 var _lodash2 = _interopRequireDefault(_lodash);
@@ -63,14 +67,15 @@ var ResponsiveReactGridLayout = function (_React$Component) {
         width = _props.width,
         breakpoints = _props.breakpoints,
         layouts = _props.layouts,
-        verticalCompact = _props.verticalCompact,
         cols = _props.cols;
 
     var breakpoint = (0, _responsiveUtils.getBreakpointFromWidth)(breakpoints, width);
     var colNo = (0, _responsiveUtils.getColsFromBreakpoint)(breakpoint, cols);
+    // verticalCompact compatibility, now deprecated
+    var compactType = this.props.verticalCompact === false ? null : this.props.compactType;
     // Get the initial layout. This can tricky; we try to generate one however possible if one doesn't exist
     // for this layout.
-    var initialLayout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(layouts, breakpoints, breakpoint, breakpoint, colNo, verticalCompact);
+    var initialLayout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(layouts, breakpoints, breakpoint, breakpoint, colNo, compactType);
 
     return {
       layout: initialLayout,
@@ -95,7 +100,7 @@ var ResponsiveReactGridLayout = function (_React$Component) {
         // Since we're setting an entirely new layout object, we must generate a new responsive layout
         // if one does not exist.
 
-        var newLayout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(nextProps.layouts, nextProps.breakpoints, _breakpoint, _breakpoint, _cols, nextProps.verticalCompact);
+        var newLayout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(nextProps.layouts, nextProps.breakpoints, _breakpoint, _breakpoint, _cols, nextProps.compactType);
         this.setState({ layout: newLayout });
       }
   };
@@ -114,7 +119,7 @@ var ResponsiveReactGridLayout = function (_React$Component) {
     var breakpoints = nextProps.breakpoints,
         cols = nextProps.cols,
         layouts = nextProps.layouts,
-        verticalCompact = nextProps.verticalCompact;
+        compactType = nextProps.compactType;
 
     var newBreakpoint = nextProps.breakpoint || (0, _responsiveUtils.getBreakpointFromWidth)(nextProps.breakpoints, nextProps.width);
 
@@ -127,10 +132,10 @@ var ResponsiveReactGridLayout = function (_React$Component) {
 
       // Find or generate a new layout.
       var newCols = (0, _responsiveUtils.getColsFromBreakpoint)(newBreakpoint, cols);
-      var _layout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(layouts, breakpoints, newBreakpoint, lastBreakpoint, newCols, verticalCompact);
+      var _layout = (0, _responsiveUtils.findOrGenerateResponsiveLayout)(layouts, breakpoints, newBreakpoint, lastBreakpoint, newCols, compactType);
 
       // This adds missing items.
-      _layout = (0, _utils.synchronizeLayoutWithChildren)(_layout, nextProps.children, newCols, verticalCompact);
+      _layout = (0, _utils.synchronizeLayoutWithChildren)(_layout, nextProps.children, newCols, compactType);
 
       // Store the new layout.
       layouts[newBreakpoint] = _layout;
@@ -174,13 +179,13 @@ ResponsiveReactGridLayout.propTypes = {
 
   // Optional, but if you are managing width yourself you may want to set the breakpoint
   // yourself as well.
-  breakpoint: _react2.default.PropTypes.string,
+  breakpoint: _propTypes2.default.string,
 
   // {name: pxVal}, e.g. {lg: 1200, md: 996, sm: 768, xs: 480}
-  breakpoints: _react2.default.PropTypes.object,
+  breakpoints: _propTypes2.default.object,
 
   // # of cols. This is a breakpoint -> cols map
-  cols: _react2.default.PropTypes.object,
+  cols: _propTypes2.default.object,
 
   // layouts is an object mapping breakpoints to layouts.
   // e.g. {lg: Layout, md: Layout, ...}
@@ -199,21 +204,21 @@ ResponsiveReactGridLayout.propTypes = {
 
   // The width of this component.
   // Required in this propTypes stanza because generateInitialState() will fail without it.
-  width: _react2.default.PropTypes.number.isRequired,
+  width: _propTypes2.default.number.isRequired,
 
   //
   // Callbacks
   //
 
   // Calls back with breakpoint and new # cols
-  onBreakpointChange: _react2.default.PropTypes.func,
+  onBreakpointChange: _propTypes2.default.func,
 
   // Callback so you can save the layout.
   // Calls back with (currentLayout, allLayouts). allLayouts are keyed by breakpoint.
-  onLayoutChange: _react2.default.PropTypes.func,
+  onLayoutChange: _propTypes2.default.func,
 
   // Calls back with (containerWidth, margin, cols, containerPadding)
-  onWidthChange: _react2.default.PropTypes.func
+  onWidthChange: _propTypes2.default.func
 };
 ResponsiveReactGridLayout.defaultProps = {
   breakpoints: { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 },
